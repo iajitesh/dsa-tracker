@@ -245,6 +245,46 @@ async function saveProgress(progress) {
   }
 }
 
+// Save entire DSA_DATA (custom patterns/questions) to Firestore or localStorage
+async function saveData() {
+  const serialized = JSON.stringify(DSA_DATA);
+  if (currentUser) {
+    try {
+      await setDoc(doc(db, 'userdata', currentUser.uid), { dsaData: serialized }, { merge: true });
+    } catch(e) { console.error('Save data error', e); }
+  } else {
+    localStorage.setItem('dsa_data_guest', serialized);
+  }
+}
+
+// Load DSA_DATA from Firestore or localStorage and merge custom additions
+async function loadData() {
+  let saved = null;
+  if (currentUser) {
+    try {
+      const snap = await getDoc(doc(db, 'userdata', currentUser.uid));
+      if (snap.exists() && snap.data().dsaData) {
+        saved = JSON.parse(snap.data().dsaData);
+      }
+    } catch(e) { console.error('Load data error', e); }
+  } else {
+    const s = localStorage.getItem('dsa_data_guest');
+    if (s) saved = JSON.parse(s);
+  }
+  if (saved) {
+    // Merge: update existing patterns, add new ones
+    saved.forEach(savedPattern => {
+      const existing = DSA_DATA.find(p => p.id === savedPattern.id);
+      if (existing) {
+        existing.name = savedPattern.name;
+        existing.questions = savedPattern.questions;
+      } else {
+        DSA_DATA.push(savedPattern);
+      }
+    });
+  }
+}
+
 async function loadCloudProgress() {
   if (!currentUser) return;
   try {
@@ -544,7 +584,7 @@ function toggleAll() {
   document.querySelector('.btn-expand').textContent = allExpanded ? 'Collapse All' : 'Expand All';
 }
 
-function addQuestion(patternId) {
+async function addQuestion(patternId) {
   const nameEl = document.getElementById('aqn_'+patternId);
   const linkEl = document.getElementById('aql_'+patternId);
   const diffEl = document.getElementById('aqd_'+patternId);
@@ -562,9 +602,9 @@ function addQuestion(patternId) {
 
   pattern.questions.push({ name, difficulty: diff, links:[{url:link, platform}] });
   nameEl.value = ''; linkEl.value = ''; diffEl.value = '';
+  await saveData();
   showToast('Question added to ' + pattern.name + '!', 'success');
   renderAll();
-  // Re-open the pattern
   setTimeout(() => {
     const card = document.getElementById('pc_'+patternId);
     if (card) card.classList.add('open');
@@ -624,6 +664,7 @@ async function confirmDelete() {
     const progress = loadProgress();
     delete progress[patternId+'_'+qName];
     await saveProgress(progress);
+    await saveData();
     closeConfirm();
     showToast('Problem deleted.', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
@@ -633,6 +674,7 @@ async function confirmDelete() {
     const { patternId } = _pendingDelete;
     const idx = DSA_DATA.findIndex(p=>p.id===patternId);
     if (idx !== -1) DSA_DATA.splice(idx, 1);
+    await saveData();
     closeConfirm();
     showToast('Pattern deleted.', 'success');
     renderAll();
@@ -688,6 +730,7 @@ async function saveRename() {
     if (!newName) { showToast('Name cannot be empty', 'error'); return; }
     const pattern = DSA_DATA.find(p=>p.id===patternId);
     pattern.name = newName;
+    await saveData();
     closeRename();
     showToast('Pattern renamed!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
@@ -699,12 +742,12 @@ async function saveRename() {
     if (!newName) { showToast('Name cannot be empty', 'error'); return; }
     const pattern = DSA_DATA.find(p=>p.id===patternId);
     const q = pattern.questions.find(q=>q.name===qName);
-    // migrate progress key
     const progress = loadProgress();
     const oldKey = patternId+'_'+qName;
     const newKey = patternId+'_'+newName;
     if (progress[oldKey]) { progress[newKey] = progress[oldKey]; delete progress[oldKey]; await saveProgress(progress); }
     q.name = newName;
+    await saveData();
     closeRename();
     showToast('Problem renamed!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
@@ -721,6 +764,7 @@ async function saveRename() {
     else if (newUrl.includes('geeksforgeeks')) platform = 'GFG';
     else if (newUrl.includes('youtube')) platform = 'YouTube';
     q.links[0] = { url: newUrl, platform };
+    await saveData();
     closeRename();
     showToast('Link updated!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
@@ -737,7 +781,7 @@ function toggleAddPatternForm() {
   if (_addPatternOpen) document.getElementById('newPatternName').focus();
   else document.getElementById('newPatternName').value = '';
 }
-function addNewPattern() {
+async function addNewPattern() {
   const nameEl = document.getElementById('newPatternName');
   const name = nameEl.value.trim();
   if (!name) { showToast('Please enter a pattern name', 'error'); return; }
@@ -747,9 +791,9 @@ function addNewPattern() {
   _addPatternOpen = false;
   document.getElementById('addPatternForm').classList.remove('open');
   document.getElementById('addPatternBtn').style.display = '';
+  await saveData();
   showToast('Pattern "' + name + '" created!', 'success');
   renderAll();
-  // Scroll to and open new pattern card
   setTimeout(()=>{
     const card = document.getElementById('pc_'+(maxId+1));
     if (card) { card.classList.add('open'); card.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -804,8 +848,10 @@ onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = { uid: user.uid, email: user.email, name: user.displayName || user.email };
     await loadCloudProgress();
+    await loadData();
     onLogin();
   } else {
+    await loadData(); // load guest data from localStorage
     onLogout();
   }
 });
