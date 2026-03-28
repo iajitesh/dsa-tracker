@@ -250,7 +250,8 @@ async function saveData() {
   const serialized = JSON.stringify(DSA_DATA);
   if (currentUser) {
     try {
-      await setDoc(doc(db, 'userdata', currentUser.uid), { dsaData: serialized }, { merge: true });
+      // Store in same 'progress' doc as a separate field — rules already allow this
+      await setDoc(doc(db, 'progress', currentUser.uid), { dsaData: serialized }, { merge: true });
     } catch(e) { console.error('Save data error', e); }
   } else {
     localStorage.setItem('dsa_data_guest', serialized);
@@ -262,7 +263,7 @@ async function loadData() {
   let saved = null;
   if (currentUser) {
     try {
-      const snap = await getDoc(doc(db, 'userdata', currentUser.uid));
+      const snap = await getDoc(doc(db, 'progress', currentUser.uid));
       if (snap.exists() && snap.data().dsaData) {
         saved = JSON.parse(snap.data().dsaData);
       }
@@ -272,16 +273,9 @@ async function loadData() {
     if (s) saved = JSON.parse(s);
   }
   if (saved) {
-    // Merge: update existing patterns, add new ones
-    saved.forEach(savedPattern => {
-      const existing = DSA_DATA.find(p => p.id === savedPattern.id);
-      if (existing) {
-        existing.name = savedPattern.name;
-        existing.questions = savedPattern.questions;
-      } else {
-        DSA_DATA.push(savedPattern);
-      }
-    });
+    // Replace DSA_DATA entirely with saved version
+    DSA_DATA.length = 0;
+    saved.forEach(p => DSA_DATA.push(p));
   }
 }
 
