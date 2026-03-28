@@ -62,6 +62,27 @@
   .user-badge.visible { display:flex; }
   .user-dot { width:8px; height:8px; background:var(--green); border-radius:50%; }
 
+  /* ── USER DROPDOWN ── */
+  .user-dropdown {
+    display:none; position:absolute; right:0; top:calc(100% + 8px);
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; min-width:200px; z-index:200;
+    box-shadow:0 8px 24px rgba(0,0,0,.5); overflow:hidden;
+  }
+  .user-badge.drop-open .user-dropdown { display:block; }
+  .user-dropdown-email {
+    padding:10px 14px; font-size:0.78rem; color:var(--text-muted);
+    word-break:break-all;
+  }
+  .user-dropdown-divider { height:1px; background:var(--border); }
+  .user-dropdown-item {
+    display:block; width:100%; padding:10px 14px; font-size:0.83rem;
+    font-weight:500; cursor:pointer; background:none; border:none;
+    font-family:inherit; text-align:left; transition:background .12s;
+  }
+  .user-dropdown-item.danger { color:#f87171; }
+  .user-dropdown-item.danger:hover { background:var(--red-bg); color:var(--red); }
+
   /* ── MODAL ── */
   .modal-overlay {
     display:none; position:fixed; inset:0; z-index:200;
@@ -422,16 +443,21 @@
 <nav class="navbar">
   <div class="logo">
     <div class="logo-icon">⚡</div>
-    <div class="logo-text">DSA <span>Tracker</span></div>
+    <div class="logo-text">Ajitesh's <span>DSA Tracker</span></div>
   </div>
   <div class="nav-right">
-    <div class="user-badge" id="userBadge">
+    <div class="user-badge" id="userBadge" onclick="toggleUserDropdown()" style="cursor:pointer;position:relative;">
       <div class="user-dot"></div>
-      <span id="userEmail"></span>
+      <span id="userDisplayName"></span>
+      <span style="font-size:0.7rem;color:var(--text-muted);margin-left:2px;">▾</span>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="user-dropdown-email" id="userEmailDisplay"></div>
+        <div class="user-dropdown-divider"></div>
+        <button class="user-dropdown-item danger" onclick="event.stopPropagation();signOut()">Sign Out</button>
+      </div>
     </div>
     <button class="btn btn-ghost" id="signInBtn" onclick="openModal('signin')">Sign In</button>
     <button class="btn btn-primary" id="signUpBtn" onclick="openModal('signup')">Sign Up</button>
-    <button class="btn btn-ghost" id="signOutBtn" onclick="signOut()" style="display:none">Sign Out</button>
   </div>
 </nav>
 
@@ -896,10 +922,10 @@ async function signOut() {
 function onLogin() {
   closeModal();
   document.getElementById('userBadge').classList.add('visible');
-  document.getElementById('userEmail').textContent = currentUser.name || currentUser.email;
+  document.getElementById('userDisplayName').textContent = currentUser.name || currentUser.email;
+  document.getElementById('userEmailDisplay').textContent = currentUser.email;
   document.getElementById('signInBtn').style.display = 'none';
   document.getElementById('signUpBtn').style.display = 'none';
-  document.getElementById('signOutBtn').style.display = '';
   document.getElementById('guestBanner').classList.add('hidden');
   showToast('Welcome back, ' + (currentUser.name || currentUser.email) + '! 👋', 'success');
   renderAll();
@@ -909,13 +935,25 @@ function onLogout() {
   currentUser = null;
   _cloudProgress = {};
   document.getElementById('userBadge').classList.remove('visible');
+  document.getElementById('userBadge').classList.remove('drop-open');
   document.getElementById('signInBtn').style.display = '';
   document.getElementById('signUpBtn').style.display = '';
-  document.getElementById('signOutBtn').style.display = 'none';
   document.getElementById('guestBanner').classList.remove('hidden');
   showToast('Signed out successfully', 'success');
   renderAll();
 }
+
+function toggleUserDropdown() {
+  document.getElementById('userBadge').classList.toggle('drop-open');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const badge = document.getElementById('userBadge');
+  if (badge && !badge.contains(e.target)) {
+    badge.classList.remove('drop-open');
+  }
+});
 
 // ═══════════════════════════════════════════════════
 //  RENDER
@@ -1354,6 +1392,7 @@ onAuthStateChanged(auth, async (user) => {
 // ═══════════════════════════════════════════════════
 //  EXPOSE FUNCTIONS TO GLOBAL SCOPE (needed for onclick in HTML)
 // ═══════════════════════════════════════════════════
+window.toggleUserDropdown = toggleUserDropdown;
 window.openModal = openModal;
 window.closeModal = closeModal;
 window.switchTab = switchTab;
