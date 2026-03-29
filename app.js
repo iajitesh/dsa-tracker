@@ -380,6 +380,7 @@ function onLogin() {
   document.getElementById('guestBanner').classList.add('hidden');
   showToast('Welcome back, ' + (currentUser.name || currentUser.email) + '! 👋', 'success');
   renderAll();
+  initDragDrop();
 }
 
 function onLogout() {
@@ -392,6 +393,7 @@ function onLogout() {
   document.getElementById('guestBanner').classList.remove('hidden');
   showToast('Signed out successfully', 'success');
   renderAll();
+  initDragDrop();
 }
 
 function toggleUserDropdown() {
@@ -439,7 +441,8 @@ function renderAll() {
     card.id = 'pc_' + pattern.id;
 
     card.innerHTML = `
-      <div class="pattern-header" onclick="togglePattern(${pattern.id})">
+      <div class="pattern-header" onclick="togglePattern(${pattern.id})" draggable="true" data-pattern-id="${pattern.id}">
+        <span class="drag-handle pattern-drag" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span class="pattern-chevron">▶</span>
         <div class="pattern-num">${pattern.id}</div>
         <div class="pattern-title">${pattern.name}</div>
@@ -457,7 +460,7 @@ function renderAll() {
           </div>
         </div>
       </div>
-      <div class="questions-list" id="ql_${pattern.id}">
+      <div class="questions-list" id="ql_${pattern.id}" data-pattern-id="${pattern.id}">
         ${qs.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><div>No questions yet — add one below!</div></div>' : ''}
         ${qs.map(q => renderQuestion(q, pattern.id, progress)).join('')}
       </div>
@@ -466,7 +469,7 @@ function renderAll() {
         <div class="add-q-form">
           <input type="text" class="add-q-name" id="aqn_${pattern.id}" placeholder="Question name">
           <input type="url" class="add-q-link" id="aql_${pattern.id}" placeholder="Problem link (https://...)">
-          <select class="add-q-diff" id="aqd_${pattern.id}">
+          <select class="add-q-diff" id="aqd_${pattern.id}" onchange="updateDiffColor(this)">
             <option value="">No Difficulty</option>
             <option value="easy">Easy</option>
             <option value="medium">Medium</option>
@@ -496,7 +499,8 @@ function renderQuestion(q, patternId, progress) {
 
   const qNameSafe = q.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
-  return `<div class="question-row" id="qr_${patternId}_${encodeURIComponent(q.name)}">
+  return `<div class="question-row" id="qr_${patternId}_${encodeURIComponent(q.name)}" draggable="true" data-pattern-id="${patternId}" data-q-name="${qNameSafe}">
+    <span class="drag-handle q-drag" title="Drag to reorder">⠿</span>
     <div class="q-check ${done?'checked':''}" onclick="toggleQ(${patternId},'${qNameSafe}',this)"></div>
     <div class="q-name ${done?'done':''}">${q.name}</div>
     <div class="q-diff-wrap ${wrapCls}" title="Click to change difficulty">
@@ -610,6 +614,7 @@ async function addQuestion(patternId) {
   await saveData();
   showToast('Question added to ' + pattern.name + '!', 'success');
   renderAll();
+  initDragDrop();
   setTimeout(() => {
     const card = document.getElementById('pc_'+patternId);
     if (card) card.classList.add('open');
@@ -674,6 +679,7 @@ async function confirmDelete() {
     showToast('Problem deleted.', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
     renderAll();
+  initDragDrop();
     if (wasOpen) setTimeout(()=>{ const c=document.getElementById('pc_'+patternId); if(c) c.classList.add('open'); },50);
   } else {
     const { patternId } = _pendingDelete;
@@ -683,6 +689,7 @@ async function confirmDelete() {
     closeConfirm();
     showToast('Pattern deleted.', 'success');
     renderAll();
+  initDragDrop();
   }
 }
 
@@ -740,6 +747,7 @@ async function saveRename() {
     showToast('Pattern renamed!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
     renderAll();
+  initDragDrop();
     if (wasOpen) setTimeout(()=>{ const c=document.getElementById('pc_'+patternId); if(c) c.classList.add('open'); },50);
 
   } else if (type === 'question') {
@@ -757,6 +765,7 @@ async function saveRename() {
     showToast('Problem renamed!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
     renderAll();
+  initDragDrop();
     if (wasOpen) setTimeout(()=>{ const c=document.getElementById('pc_'+patternId); if(c) c.classList.add('open'); },50);
 
   } else if (type === 'link') {
@@ -774,6 +783,7 @@ async function saveRename() {
     showToast('Link updated!', 'success');
     const wasOpen = document.getElementById('pc_'+patternId)?.classList.contains('open');
     renderAll();
+  initDragDrop();
     if (wasOpen) setTimeout(()=>{ const c=document.getElementById('pc_'+patternId); if(c) c.classList.add('open'); },50);
   }
 }
@@ -799,6 +809,7 @@ async function addNewPattern() {
   await saveData();
   showToast('Pattern "' + name + '" created!', 'success');
   renderAll();
+  initDragDrop();
   setTimeout(()=>{
     const card = document.getElementById('pc_'+(maxId+1));
     if (card) { card.classList.add('open'); card.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -895,4 +906,97 @@ window.addNewPattern = addNewPattern;
 window.addQuestion = addQuestion;
 window.showToast = showToast;
 
+// ═══════════════════════════════════════════════════
+//  DRAG AND DROP — Questions within a pattern
+// ═══════════════════════════════════════════════════
+let _dragSrcEl = null;
+let _dragType = null; // 'question' or 'pattern'
+
+function initDragDrop() {
+  // ── Question rows ──
+  document.querySelectorAll('.question-row[draggable]').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      _dragSrcEl = row;
+      _dragType = 'question';
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => row.classList.add('dragging'), 0);
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      document.querySelectorAll('.question-row').forEach(r => r.classList.remove('drag-over'));
+      _dragSrcEl = null;
+    });
+    row.addEventListener('dragover', e => {
+      if (_dragType !== 'question') return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.question-row').forEach(r => r.classList.remove('drag-over'));
+      if (row !== _dragSrcEl) row.classList.add('drag-over');
+    });
+    row.addEventListener('drop', async e => {
+      e.preventDefault();
+      if (_dragType !== 'question' || !_dragSrcEl || _dragSrcEl === row) return;
+      const srcPatternId = parseInt(_dragSrcEl.dataset.patternId);
+      const tgtPatternId = parseInt(row.dataset.patternId);
+      if (srcPatternId !== tgtPatternId) return; // only within same pattern
+      const pattern = DSA_DATA.find(p => p.id === srcPatternId);
+      const srcName = _dragSrcEl.dataset.qName;
+      const tgtName = row.dataset.qName;
+      const srcIdx = pattern.questions.findIndex(q => q.name === srcName);
+      const tgtIdx = pattern.questions.findIndex(q => q.name === tgtName);
+      if (srcIdx === -1 || tgtIdx === -1) return;
+      const [moved] = pattern.questions.splice(srcIdx, 1);
+      pattern.questions.splice(tgtIdx, 0, moved);
+      await saveData();
+      const wasOpen = document.getElementById('pc_'+srcPatternId)?.classList.contains('open');
+      renderAll();
+  initDragDrop();
+      if (wasOpen) setTimeout(() => { const c = document.getElementById('pc_'+srcPatternId); if(c) c.classList.add('open'); }, 50);
+    });
+  });
+
+  // ── Pattern cards ──
+  document.querySelectorAll('.pattern-header[draggable]').forEach(header => {
+    header.addEventListener('dragstart', e => {
+      _dragSrcEl = header.closest('.pattern-card');
+      _dragType = 'pattern';
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => _dragSrcEl.classList.add('dragging'), 0);
+    });
+    header.addEventListener('dragend', () => {
+      document.querySelectorAll('.pattern-card').forEach(c => {
+        c.classList.remove('dragging');
+        c.classList.remove('drag-over');
+      });
+      _dragSrcEl = null;
+    });
+    header.addEventListener('dragover', e => {
+      if (_dragType !== 'pattern') return;
+      e.preventDefault();
+      const card = header.closest('.pattern-card');
+      if (card !== _dragSrcEl) {
+        document.querySelectorAll('.pattern-card').forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+      }
+    });
+    header.addEventListener('drop', async e => {
+      e.preventDefault();
+      if (_dragType !== 'pattern' || !_dragSrcEl) return;
+      const tgtCard = header.closest('.pattern-card');
+      if (tgtCard === _dragSrcEl) return;
+      const srcId = parseInt(_dragSrcEl.id.replace('pc_',''));
+      const tgtId = parseInt(tgtCard.id.replace('pc_',''));
+      const srcIdx = DSA_DATA.findIndex(p => p.id === srcId);
+      const tgtIdx = DSA_DATA.findIndex(p => p.id === tgtId);
+      if (srcIdx === -1 || tgtIdx === -1) return;
+      const [moved] = DSA_DATA.splice(srcIdx, 1);
+      DSA_DATA.splice(tgtIdx, 0, moved);
+      await saveData();
+      renderAll();
+  initDragDrop();
+    });
+  });
+}
+
 renderAll();
+initDragDrop();
