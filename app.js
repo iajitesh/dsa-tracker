@@ -250,7 +250,6 @@ async function saveData() {
   const serialized = JSON.stringify(DSA_DATA);
   if (currentUser) {
     try {
-      // Store in same 'progress' doc as a separate field — rules already allow this
       await setDoc(doc(db, 'progress', currentUser.uid), { dsaData: serialized }, { merge: true });
     } catch(e) { console.error('Save data error', e); }
   } else {
@@ -258,7 +257,6 @@ async function saveData() {
   }
 }
 
-// Load DSA_DATA from Firestore or localStorage and merge custom additions
 async function loadData() {
   let saved = null;
   if (currentUser) {
@@ -272,10 +270,12 @@ async function loadData() {
     const s = localStorage.getItem('dsa_data_guest');
     if (s) saved = JSON.parse(s);
   }
-  if (saved) {
-    // Replace DSA_DATA entirely with saved version
+  if (saved && saved.length > 0) {
     DSA_DATA.length = 0;
     saved.forEach(p => DSA_DATA.push(p));
+  } else if (currentUser) {
+    // First time login — no saved data yet, save the default DSA_DATA to cloud
+    await saveData();
   }
 }
 
@@ -285,11 +285,22 @@ async function loadCloudProgress() {
     const snap = await getDoc(doc(db, 'progress', currentUser.uid));
     if (snap.exists()) {
       _cloudProgress = JSON.parse(snap.data().data || '{}');
+      // Also load DSA data from same snapshot to avoid double read
+      if (snap.data().dsaData) {
+        const saved = JSON.parse(snap.data().dsaData);
+        if (saved && saved.length > 0) {
+          DSA_DATA.length = 0;
+          saved.forEach(p => DSA_DATA.push(p));
+        }
+      }
     } else {
-      // Migrate guest progress to cloud on first login
+      // Brand new user — migrate guest progress and save default data
       const guest = localStorage.getItem('dsa_progress_guest');
       _cloudProgress = guest ? JSON.parse(guest) : {};
-      await setDoc(doc(db, 'progress', currentUser.uid), { data: JSON.stringify(_cloudProgress) });
+      await setDoc(doc(db, 'progress', currentUser.uid), {
+        data: JSON.stringify(_cloudProgress),
+        dsaData: JSON.stringify(DSA_DATA)
+      });
     }
   } catch(e) { _cloudProgress = {}; }
 }
@@ -841,8 +852,7 @@ document.addEventListener('keydown', e => { if (e.key==='Enter' && _addPatternOp
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = { uid: user.uid, email: user.email, name: user.displayName || user.email };
-    await loadCloudProgress();
-    await loadData();
+    await loadCloudProgress(); // this now also loads DSA_DATA in one read
     onLogin();
   } else {
     await loadData(); // load guest data from localStorage
