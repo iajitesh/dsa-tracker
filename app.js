@@ -492,30 +492,33 @@ function renderAll() {
 
   let totalQ = 0, totalSolved = 0;
 
-  DSA_DATA.forEach(pattern => {
+  DSA_DATA.forEach((pattern, index) => {
     // Filter questions
-    const qs = pattern.questions.filter(q => {
-      const matchSearch = !search || q.name.toLowerCase().includes(search) || pattern.name.toLowerCase().includes(search);
+    const qs = pattern.questions.filter((q) => {
+      const matchSearch =
+        !search ||
+        q.name.toLowerCase().includes(search) ||
+        pattern.name.toLowerCase().includes(search);
       const matchDiff = !diff || q.difficulty === diff;
-      const matchPlat = !plat || q.links.some(l => l.platform === plat);
+      const matchPlat = !plat || q.links.some((l) => l.platform === plat);
       return matchSearch && matchDiff && matchPlat;
     });
     if (search && qs.length === 0) return; // hide empty patterns when searching
 
     totalQ += qs.length;
-    const solved = qs.filter(q => progress[pattern.id+'_'+q.name]).length;
+    const solved = qs.filter((q) => progress[pattern.id + "_" + q.name]).length;
     totalSolved += solved;
-    const pct = qs.length ? Math.round(solved/qs.length*100) : 0;
+    const pct = qs.length ? Math.round((solved / qs.length) * 100) : 0;
 
-    const card = document.createElement('div');
-    card.className = 'pattern-card' + (allExpanded ? ' open' : '');
-    card.id = 'pc_' + pattern.id;
+    const card = document.createElement("div");
+    card.className = "pattern-card" + (allExpanded ? " open" : "");
+    card.id = "pc_" + pattern.id;
 
     card.innerHTML = `
       <div class="pattern-header" onclick="togglePattern(${pattern.id})" draggable="true" data-pattern-id="${pattern.id}">
         <span class="drag-handle pattern-drag" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
         <span class="pattern-chevron">▶</span>
-        <div class="pattern-num">${pattern.id}</div>
+       <div class="pattern-num">${index + 1}</div>
         <div class="pattern-title">${pattern.name}</div>
         <div class="pattern-count">${solved}/${qs.length} Completed</div>
         <div class="pattern-progress-wrap">
@@ -532,8 +535,8 @@ function renderAll() {
         </div>
       </div>
       <div class="questions-list" id="ql_${pattern.id}" data-pattern-id="${pattern.id}">
-        ${qs.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><div>No questions yet — add one below!</div></div>' : ''}
-        ${qs.map(q => renderQuestion(q, pattern.id, progress)).join('')}
+        ${qs.length === 0 ? '<div class="empty"><div class="empty-icon">📭</div><div>No questions yet — add one below!</div></div>' : ""}
+        ${qs.map((q) => renderQuestion(q, pattern.id, progress)).join("")}
       </div>
       <div class="add-q-panel">
         <h4>➕ Add New Question</h4>
