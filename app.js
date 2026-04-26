@@ -561,12 +561,30 @@ function renderQuestion(q, patternId, progress) {
   const done = !!progress[key];
   const diff = q.difficulty || '';
   const wrapCls = diff ? 'diff-'+diff : 'diff-none';
-  const linksHtml = q.links.map((l,i) => {
-    const cls = l.platform==='LeetCode'?'lc':l.platform==='GFG'?'gfg':l.platform==='YouTube'?'yt':'';
-    const icon = l.platform==='LeetCode'?'🔗':l.platform==='GFG'?'🌿':l.platform==='YouTube'?'▶':'🔗';
-    const label = q.links.length > 1 ? (l.platform + ' '+(i+1)) : l.platform;
-    return `<a href="${l.url}" target="_blank" class="q-link ${cls}">${icon} ${label}</a>`;
-  }).join('');
+  const linksHtml = q.links
+    .filter((l) => l.platform !== "YouTube") // ← DISABLED: remove this line to re-enable YouTube
+    .map((l, i) => {
+      const cls =
+        l.platform === "LeetCode"
+          ? "lc"
+          : l.platform === "GFG"
+            ? "gfg"
+            : l.platform === "YouTube"
+              ? "yt"
+              : "";
+      const icon =
+        l.platform === "LeetCode"
+          ? "🔗"
+          : l.platform === "GFG"
+            ? "🌿"
+            : l.platform === "YouTube"
+              ? "▶"
+              : "🔗";
+      const label =
+        q.links.length > 1 ? l.platform + " " + (i + 1) : l.platform;
+      return `<a href="${l.url}" target="_blank" class="q-link ${cls}">${icon} ${label}</a>`;
+    })
+    .join("");
 
   const qNameSafe = q.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
 
